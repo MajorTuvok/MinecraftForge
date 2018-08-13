@@ -19,8 +19,6 @@
 
 package net.minecraftforge.debug.client;
 
-import org.lwjgl.opengl.GL11;
-
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.client.renderer.BufferBuilder;
@@ -36,6 +34,7 @@ import net.minecraftforge.event.world.WorldEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.relauncher.Side;
+import org.lwjgl.opengl.GL11;
 
 @Mod(modid = ReplaceSunMoonTest.MODID, name = "Replace Sun & Moon", version = "0.0.0", acceptableRemoteVersions = "*")
 public class ReplaceSunMoonTest {
@@ -63,26 +62,28 @@ public class ReplaceSunMoonTest {
             {
                 SkyRenderHandler renderHandler = world.provider.getSkyRenderHandler();
                 if(REMOVE_SUN)
-                    renderHandler.remove(new ResourceLocation("sun"));
+                    renderHandler.remove(SkyRenderHandler.SKY_LAYER_SUN);
                 if(REMOVE_MOON)
-                    renderHandler.remove(new ResourceLocation("moon"));
+                    renderHandler.remove(SkyRenderHandler.SKY_LAYER_MOON);
                 if(REMOVE_STARS)
-                    renderHandler.remove(new ResourceLocation("stars"));
+                    renderHandler.remove(SkyRenderHandler.SKY_LAYER_STARS);
 
                 if(REPLACE_SUN && !REMOVE_SUN)
-                    renderHandler.getLayer(new ResourceLocation("sun")).setRenderer(new SunRenderer());
+                    renderHandler.getLayer(SkyRenderHandler.SKY_LAYER_SUN).setRenderer(new SunRenderer());
                 if(REPLACE_MOON && !REMOVE_MOON)
-                    renderHandler.getLayer(new ResourceLocation("moon")).setRenderer(new MoonRenderer());
+                    renderHandler.getLayer(SkyRenderHandler.SKY_LAYER_MOON).setRenderer(new MoonRenderer());
 
                 if(REPLACE_SUN_FAST)
                 {
-                    SkyLayer celestialLayer = renderHandler.getLayer(new ResourceLocation("celestial"));
-                    SkyLayer sunLayer = renderHandler.register(celestialLayer.getGroup(), new ResourceLocation("sun"));
-                    SkyLayer moonLayer = renderHandler.getLayer(new ResourceLocation("moon"));
+                    SkyLayer sunLayer = renderHandler.register(SkyRenderHandler.SKY_LAYER_SUN);
+                    SkyLayer moonLayer = renderHandler.getLayer(SkyRenderHandler.SKY_LAYER_MOON);
                     sunLayer.setRenderer(new OpaqueMovingSunRenderer());
+                    sunLayer.addDependency(SkyRenderHandler.SKY_LAYER_PLANETARY);
+                    sunLayer.addDependant(SkyRenderHandler.SKY_LAYER_FOREGROUND);
                     if(SUN_FIRST)
-                        renderHandler.requireOrder(sunLayer, moonLayer);
-                    else renderHandler.requireOrder(moonLayer, sunLayer);
+                        sunLayer.addDependency(moonLayer.id);
+                    else
+                        moonLayer.addDependency(sunLayer.id);
                 }
             }
         }

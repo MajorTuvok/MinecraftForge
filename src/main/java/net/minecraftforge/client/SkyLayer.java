@@ -19,20 +19,37 @@
 
 package net.minecraftforge.client;
 
-import javax.annotation.Nullable;
-
 import net.minecraft.util.ResourceLocation;
+
+import javax.annotation.Nullable;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 
 public class SkyLayer {
     public final ResourceLocation id;
     private Group group = null;
     private IRenderHandler renderer = null;
     private Runnable update;
+    private Set<ResourceLocation> dependencies;
+    private Set<ResourceLocation> dependendants;
 
     SkyLayer(ResourceLocation idIn, Runnable updateIn)
     {
         this.id = idIn;
         this.update = updateIn;
+        this.dependencies = new HashSet<>();
+        this.dependendants = new HashSet<>();
+    }
+
+    public Set<ResourceLocation> getDependencies()
+    {
+        return Collections.unmodifiableSet(dependencies);
+    }
+
+    public Set<ResourceLocation> getDependendants()
+    {
+        return Collections.unmodifiableSet(dependendants);
     }
 
     /**
@@ -82,6 +99,16 @@ public class SkyLayer {
     public @Nullable IRenderHandler getRenderer()
     {
         return this.renderer;
+    }
+
+    public void addDependency(ResourceLocation location)
+    {
+        dependencies.add(location);
+    }
+
+    public void addDependant(ResourceLocation location)
+    {
+        dependendants.add(location);
     }
 
     public class Group

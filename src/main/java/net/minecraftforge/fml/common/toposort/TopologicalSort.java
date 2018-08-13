@@ -19,23 +19,11 @@
 
 package net.minecraftforge.fml.common.toposort;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.Set;
-import java.util.SortedSet;
-import java.util.TreeSet;
-
-import net.minecraftforge.fml.common.FMLLog;
-
 import com.google.common.collect.Sets;
 import com.google.common.collect.Sets.SetView;
+import net.minecraftforge.fml.common.FMLLog;
+
+import java.util.*;
 
 /**
  * Topological sort for mod loading
@@ -62,6 +50,11 @@ public class TopologicalSort
             orderedNodes.add(node);
             graph.put(node, new TreeSet<T>(Comparator.comparingInt(o -> orderedNodes.indexOf(o))));
             return true;
+        }
+
+        public boolean hasNode(T node)
+        {
+            return graph.containsKey(node);
         }
 
         public void addEdge(T from, T to)

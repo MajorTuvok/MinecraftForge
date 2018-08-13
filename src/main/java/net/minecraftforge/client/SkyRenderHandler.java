@@ -19,34 +19,11 @@
 
 package net.minecraftforge.client;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Random;
-import java.util.Set;
-
-import javax.annotation.Nullable;
-
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.ListMultimap;
-import com.google.common.graph.EndpointPair;
-import com.google.common.graph.GraphBuilder;
-import com.google.common.graph.Graphs;
-import com.google.common.graph.MutableGraph;
-import com.google.common.graph.MutableValueGraph;
-import com.google.common.graph.ValueGraphBuilder;
-
+import com.sun.istack.internal.NotNull;
+import com.sun.istack.internal.Nullable;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.WorldClient;
-import net.minecraft.client.renderer.BufferBuilder;
-import net.minecraft.client.renderer.GLAllocation;
-import net.minecraft.client.renderer.GlStateManager;
-import net.minecraft.client.renderer.OpenGlHelper;
-import net.minecraft.client.renderer.RenderHelper;
-import net.minecraft.client.renderer.Tessellator;
+import net.minecraft.client.renderer.*;
 import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
 import net.minecraft.client.renderer.vertex.VertexBuffer;
 import net.minecraft.client.renderer.vertex.VertexFormat;
@@ -55,31 +32,46 @@ import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.WorldProvider;
-import net.minecraftforge.fml.common.FMLLog;
+import net.minecraftforge.fml.common.toposort.TopologicalSort;
+import net.minecraftforge.fml.common.toposort.TopologicalSort.DirectedGraph;
+
+import java.util.*;
 
 /**
  * Class which handles sky rendering. Sky render layers can be registered here.
  * */
 public class SkyRenderHandler
 {
-    private SkyLayer rootLayer;
-    private final Map<ResourceLocation, SkyLayer> layerMap = new HashMap<>();
-    private final MutableGraph<SkyLayer> layerGraph = GraphBuilder.directed().build();
-    private final MutableGraph<SkyLayer> orderGraph = GraphBuilder.directed().build();
+    public static final ResourceLocation SKY_LAYER_START = new ResourceLocation("sky_all");
+    public static final ResourceLocation SKY_LAYER_END = new ResourceLocation("sky_end");
+    public static final ResourceLocation SKY_LAYER_FOREGROUND = new ResourceLocation("sky_foreground");
+    public static final ResourceLocation SKY_LAYER_BACKGROUND = new ResourceLocation("sky_background");
+    public static final ResourceLocation SKY_LAYER_CELESTIAL = new ResourceLocation("celestial");
+    public static final ResourceLocation SKY_LAYER_PLANETARY = new ResourceLocation("planetary");
+    public static final ResourceLocation SKY_LAYER_STARS = new ResourceLocation("stars");
+    public static final ResourceLocation SKY_LAYER_SUN = new ResourceLocation("sun");
+    public static final ResourceLocation SKY_LAYER_MOON = new ResourceLocation("moon");
 
     private boolean unfinished;
     private boolean enabled;
     private Runnable update = () -> { this.unfinished = this.enabled = true; };
-    private final ListMultimap<SkyLayer, SkyLayer> order = ArrayListMultimap.create();
 
-    private SkyLayer register(ResourceLocation id)
+    private Map<ResourceLocation,SkyLayer> mLayerLookup;
+    private List<SkyLayer> mAllLayers;
+    private List<SkyLayer> mSortedLayers;
+
+    /**
+     * Registers a new SkyLayer with the given id. If one already existed for the given id, it will be replaced.
+     * @param id the layer id
+     * @return The newly created and registered SkyLayer
+     */
+    public SkyLayer register(@NotNull ResourceLocation id)
     {
         update.run();
-        SkyLayer layer = new SkyLayer(id, this.update);
-        this.rootLayer = layer;
-        layerMap.put(id, layer);
-        layerGraph.addNode(layer);
-        orderGraph.addNode(layer);
+        SkyLayer layer = new SkyLayer(Objects.requireNonNull(id), this.update);
+        mAllLayers.remove(layer); //remove existing layers
+        mAllLayers.add(layer);
+        mLayerLookup.put(id,layer);
         return layer;
     }
 
@@ -90,284 +82,121 @@ public class SkyRenderHandler
      * */
     public boolean remove(ResourceLocation id)
     {
+        if (!hasSkyLayer(id))
+            return false;
         update.run();
-
-        if(this.rootLayer.id.equals(id))
-            throw new IllegalArgumentException(String.format("Can't remove root layer with id %s", id));
-
-        if(layerMap.containsKey(id))
-        {
-            SkyLayer layer = layerMap.get(id);
-            for(SkyLayer subLayer : Graphs.reachableNodes(this.layerGraph, layer))
-            {
-                SkyLayer parent = layerGraph.predecessors(subLayer).stream().findFirst().get();
-                layerMap.remove(subLayer.id);
-                layerGraph.removeNode(subLayer);
-                orderGraph.removeNode(subLayer);
-                order.remove(parent, subLayer);
-            }
-            return true;
-        } else return false;
-    }
-
-    /**
-     * Registers certain layer as part of certain layer group.
-     * Replaces previous one with an empty layer if there was a layer.
-     * @param layerGroup the layer group
-     * @param id the layer id
-     * @return the registered layer
-     * @throws IllegalArgumentException if the specified layer group is invalid / not registered
-     * */
-    public SkyLayer register(SkyLayer.Group layerGroup, ResourceLocation id)
-    {
-        update.run();
-        if(!layerMap.containsKey(layerGroup.layer.id))
-            throw new IllegalArgumentException(String.format("Invalid layer %s", layerGroup.layer.id));
-
-        if(layerMap.containsKey(id))
-            this.remove(id);
-
-        SkyLayer layer = new SkyLayer(id, this.update);
-        layerMap.put(id, layer);
-        layerGraph.addNode(layer);
-        layerGraph.putEdge(layerGroup.layer, layer);
-        orderGraph.addNode(layer);
-        order.put(layerGroup.layer, layer);
-        return layer;
-    }
-
-    /**
-     * Same as {@link #register(net.minecraftforge.client.SkyLayer.Group, ResourceLocation)},
-     *  but registers before the specified sibling.
-     * @param sibling the specified sibling
-     * @param id the layer id
-     * @return the registered layer
-     * @throws IllegalArgumentException if the specified sibling layer does not have a valid parent layer
-     * */
-    public SkyLayer registerBefore(SkyLayer sibling, ResourceLocation id)
-    {
-        if(!layerMap.containsKey(sibling.id))
-            throw new IllegalArgumentException(String.format("Invalid layer %s", sibling.id));
-        if(layerGraph.inDegree(sibling) == 0)
-            throw new IllegalArgumentException(String.format("Can't register layer before %s as it's the root layer", sibling.id));
-
-        SkyLayer registered = this.register(layerGraph.successors(sibling).stream().findFirst().get().getGroup(), id);
-        this.requireOrder(registered, sibling);
-        return registered;
-    }
-
-    /**
-     * Same as {@link #register(net.minecraftforge.client.SkyLayer.Group, ResourceLocation)},
-     *  but registers after the specified sibling.
-     * @param sibling the specified sibling
-     * @param id the layer id
-     * @return the registered layer
-     * @throws IllegalArgumentException if the specified sibling layer does not have a valid parent layer
-     * */
-    public SkyLayer registerAfter(SkyLayer sibling, ResourceLocation id)
-    {
-        if(!layerMap.containsKey(sibling.id))
-            throw new IllegalArgumentException(String.format("Invalid layer %s", sibling.id));
-        if(layerGraph.inDegree(sibling) == 0)
-            throw new IllegalArgumentException(String.format("Can't register layer after %s as it's the root layer", sibling.id));
-
-        SkyLayer registered = this.register(layerGraph.successors(sibling).stream().findFirst().get().getGroup(), id);
-        this.requireOrder(sibling, registered);
-        return registered;
-    }
-
-    /**
-     * Require ordering between two layers. <p>
-     * Ordering from a parent layer to a child layer will be ignored.
-     * @param prior the prior layer which comes before the other
-     * @param posterior the posterior layer which comes after the other
-     * */
-    public void requireOrder(SkyLayer prior, SkyLayer posterior)
-    {
-        update.run();
-        orderGraph.putEdge(prior, posterior);
-    }
-
-    /**
-     * @return the root sky layer
-     * */
-    public SkyLayer getRootLayer()
-    {
-        return this.rootLayer;
-    }
-
-    /**
-     * @return sky layer registered for specified id
-     * */
-    public @Nullable SkyLayer getLayer(ResourceLocation id)
-    {
-        return layerMap.get(id);
-    }
-
-    /**
-     * @return the sub-layers in the specified layer group
-     * */
-    public Set<SkyLayer> getSubLayers(SkyLayer.Group group)
-    {
-        return layerGraph.successors(group.layer);
+        return mAllLayers.remove(mLayerLookup.remove(id));
     }
 
     public SkyRenderHandler(WorldProvider provider)
     {
-        SkyLayer rootLayer = this.register(new ResourceLocation("sky_all"));
 
-        SkyLayer.Group rootLayerGroup = rootLayer.makeGroup();
-        SkyLayer skyBg = this.register(rootLayerGroup, new ResourceLocation("sky_background"));
-        SkyLayer celestial = this.register(rootLayerGroup, new ResourceLocation("celestial"));
-        SkyLayer skyFg = this.register(rootLayerGroup, new ResourceLocation("sky_foreground"));
+        SkyLayer root = register(SKY_LAYER_START);
+        SkyLayer end = register(SKY_LAYER_END);
+        SkyLayer skyBg = this.register(SKY_LAYER_BACKGROUND);
+        SkyLayer celestial = this.register(SKY_LAYER_CELESTIAL);
+        SkyLayer skyFg = this.register(SKY_LAYER_FOREGROUND);
 
+        celestial.addDependency(SKY_LAYER_BACKGROUND);
+        celestial.addDependant(SKY_LAYER_FOREGROUND);
         skyBg.setRenderer(new SkyBackRenderer());
         skyFg.setRenderer(new SkyFrontRenderer());
 
-        SkyLayer.Group celestialGroup = celestial.makeGroup();
 
         if(provider.isSurfaceWorld())
         {
-            SkyLayer planetary = this.register(celestialGroup, new ResourceLocation("planetary"));
-            SkyLayer stars = this.register(celestialGroup, new ResourceLocation("stars"));
+            SkyLayer planetary = this.register(SKY_LAYER_PLANETARY);
+            planetary.addDependency(SKY_LAYER_CELESTIAL);
+            planetary.addDependant(SKY_LAYER_FOREGROUND);
+            SkyLayer stars = this.register(SKY_LAYER_STARS);
 
             stars.setRenderer(new StarRenderer());
+            stars.addDependency(SKY_LAYER_CELESTIAL);
+            stars.addDependant(SKY_LAYER_PLANETARY); //stars are before 'planets' but after celestial objects start
 
-            SkyLayer.Group planetaryGroup = planetary.makeGroup();
-            SkyLayer sun = this.register(planetaryGroup, new ResourceLocation("sun"));
-            SkyLayer moon = this.register(planetaryGroup, new ResourceLocation("moon"));
+            SkyLayer sun = this.register(SKY_LAYER_SUN);
+            SkyLayer moon = this.register(SKY_LAYER_MOON);
 
+            //sun and moon are independent of each other
             sun.setRenderer(new SunRenderer());
+            sun.addDependency(SKY_LAYER_PLANETARY);
+            sun.addDependant(SKY_LAYER_FOREGROUND);//wants to be rendered before the foreground
             moon.setRenderer(new MoonRenderer());
+            moon.addDependency(SKY_LAYER_PLANETARY);
+            moon.addDependant(SKY_LAYER_FOREGROUND);//wants to be rendered before the foreground
         }
 
         this.enabled = false;
     }
 
+    public boolean hasSkyLayer(ResourceLocation id)
+    {
+        return mLayerLookup.containsKey(id);
+    }
+
+    @Nullable
+    public SkyLayer getLayer(ResourceLocation id)
+    {
+        return mLayerLookup.get(id);
+    }
+
     public void build()
     {
         // Search for actual pairs
-        Set<SkyLayer> temp = new HashSet<>();
-        ListMultimap<SkyLayer, LayerOrderInfo> quads = ArrayListMultimap.create(); // Co-parent -> Quadruples
-        for(EndpointPair<SkyLayer> pair : orderGraph.edges())
-        {
-            Optional<SkyLayer> current = Optional.of(pair.source());
-            temp.clear();
-            while(current.isPresent())
-            {
-                temp.add(current.get());
-                current = layerGraph.predecessors(current.get()).stream().findFirst();
-            }
 
-            if(temp.contains(pair.target()))
-                continue;
+        DirectedGraph<SkyLayer> graph = new DirectedGraph<>();
+        SkyLayer root = getLayer(SKY_LAYER_START);
+        SkyLayer end = getLayer(SKY_LAYER_END);
+        graph.addNode(root);
+        graph.addEdge(root,end);
 
-            current = Optional.of(pair.target());
-            Optional<SkyLayer> parent = layerGraph.predecessors(pair.target()).stream().findFirst();
-            while(parent.isPresent())
-            {
-                if(temp.contains(parent.get()))
-                    break;
-                current = parent;
-                parent = layerGraph.predecessors(current.get()).stream().findFirst();
-            }
+        setupNodes(graph);
 
-            SkyLayer sibling2 = current.get();
-            SkyLayer sibling1 = null;
-            for(SkyLayer layer : layerGraph.successors(parent.get()))
-            {
-                if(temp.contains(layer))
-                    sibling1 = layer;
-            }
+        setupEdges(graph,root,end);
 
-            if(sibling1 == null)
-                continue;
-
-            LayerOrderInfo quad = new LayerOrderInfo();
-            quad.original1 = pair.source();
-            quad.original2 = pair.target();
-            quad.parent1 = sibling1;
-            quad.parent2 = sibling2;
-            quads.put(parent.get(), quad);
-        }
-
-        // Actual sorting comes here
-        List<SkyLayer> prevOrder = new ArrayList<>();
-        List<SkyLayer> curOrder = new ArrayList<>();
-        MutableValueGraph<SkyLayer, LayerOrderInfo> currentGraph = ValueGraphBuilder.directed().build();
-        for(SkyLayer group : order.keySet())
-        {
-            if(!quads.containsKey(group))
-                continue;
-
-            //Prepare
-            prevOrder.addAll(order.get(group));
-            List<LayerOrderInfo> depList = quads.get(group);
-            for(SkyLayer layer : prevOrder)
-                currentGraph.addNode(layer);
-            for(LayerOrderInfo orderInfo : depList)
-                currentGraph.putEdgeValue(orderInfo.parent1, orderInfo.parent2, orderInfo);
-
-
-            // Sorting using Kahn's algorithm
-            while(!prevOrder.isEmpty())
-            {
-                SkyLayer node = prevOrder.remove(0);
-                if(currentGraph.inDegree(node) == 0)
-                {
-                    curOrder.add(node);
-                    for(SkyLayer succ : currentGraph.successors(node))
-                    {
-                        currentGraph.removeEdge(node, succ);
-                        if(currentGraph.inDegree(succ) == 0)
-                            prevOrder.add(succ);
-                    }
-                }
-            }
-
-            // When a cycle is detected
-            if(!currentGraph.edges().isEmpty())
-            {
-                FMLLog.log.error("Cycle detected in sky layer order in layer group {}, can't evaluate correct order", group.id);
-                SkyLayer source = currentGraph.edges().stream().findFirst().get().source();
-                SkyLayer current = source;
-                Set<SkyLayer> detected = new HashSet<>();
-                while(!detected.contains(current))
-                {
-                    detected.add(current);
-                    current = currentGraph.predecessors(current).stream().findFirst().get();
-                }
-
-                source = current;
-                do
-                {
-                    SkyLayer next = currentGraph.predecessors(current).stream().findFirst().get();
-                    LayerOrderInfo orderInfo = currentGraph.edgeValue(next, current);
-                    FMLLog.log.error("Specified: {} -> {}, Required: {} -> {}",
-                            orderInfo.original1.id, orderInfo.original2.id,
-                            orderInfo.parent1.id, orderInfo.parent2.id);
-                    current = next;
-                } while(current != source);
-
-                throw new IllegalStateException(
-                        String.format("Cycle detected while sorting sky layer under layer group %s, can't proceed.",
-                                group.id));
-            }
-
-            order.removeAll(group);
-            order.putAll(group, curOrder);
-            prevOrder.clear();
-            curOrder.clear();
-        }
-
+        mSortedLayers = TopologicalSort.topologicalSort(graph);
+        mSortedLayers.removeIf(skyLayer -> skyLayer.getRenderer() == null); //removes not required layers
         // Finished
         this.unfinished = false;
     }
 
-    private static class LayerOrderInfo
+    private void setupNodes(DirectedGraph<SkyLayer> graph)
     {
-        SkyLayer original1, original2; // Original pair in the order - just for better log
-        SkyLayer parent1, parent2; // Parent pair which matters
+        for (SkyLayer layer:mAllLayers)
+        {
+            graph.addNode(layer);
+        }
+    }
+
+    private void setupEdges(DirectedGraph<SkyLayer> graph, SkyLayer root, SkyLayer end)
+    {
+        for (SkyLayer layer:mAllLayers)
+        {
+            Set<ResourceLocation> dependencies = layer.getDependencies();
+            Set<ResourceLocation> dependants = layer.getDependendants();
+            graph.addEdge(root,layer);
+            graph.addEdge(layer,end);
+
+            for (ResourceLocation location: dependencies)
+            {
+                if (!location.equals(SKY_LAYER_END) && hasSkyLayer(location))
+                {
+                    SkyLayer depLayer = getLayer(location);
+                    if (depLayer!=null) //should always be true
+                        graph.addEdge(depLayer,layer);
+                }
+            }
+
+            for (ResourceLocation location: dependants)
+            {
+                if (!location.equals(SKY_LAYER_START) && hasSkyLayer(location))
+                {
+                    SkyLayer depLayer = getLayer(location);
+                    if (depLayer!=null) //should always be true
+                        graph.addEdge(layer,depLayer);
+                }
+            }
+        }
     }
 
     public boolean render(float partialTicks, WorldClient world, Minecraft mc)
@@ -377,20 +206,14 @@ public class SkyRenderHandler
         if(this.unfinished)
             this.build();
 
-        this.render(this.rootLayer, partialTicks, world, mc);
-        return true;
-    }
-
-    private void render(SkyLayer layer, float partialTicks, WorldClient world, Minecraft mc)
-    {
-        if(layer.getGroup() != null)
+        for (SkyLayer layer: mSortedLayers)
         {
-            for(SkyLayer subLayer : order.get(layer))
-                this.render(subLayer, partialTicks, world, mc);
+            IRenderHandler renderHandler = layer.getRenderer();
+            if (renderHandler!=null)
+                renderHandler.render(partialTicks,world,mc);
         }
 
-        if(layer.getRenderer() != null)
-            layer.getRenderer().render(partialTicks, world, mc);
+        return true;
     }
 
 
