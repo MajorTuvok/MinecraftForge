@@ -35,86 +35,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.entity.EntityPlayerSP;
-import net.minecraft.client.gui.Gui;
-import net.minecraft.client.gui.GuiIngameMenu;
-import net.minecraft.client.gui.GuiMainMenu;
-import net.minecraft.client.gui.GuiScreen;
-import net.minecraft.client.gui.GuiWorldSelection;
-import net.minecraft.client.gui.ScaledResolution;
-import net.minecraft.client.gui.ServerListEntryNormal;
-import net.minecraft.client.multiplayer.GuiConnecting;
-import net.minecraft.client.multiplayer.ServerData;
-import net.minecraft.client.multiplayer.WorldClient;
-import net.minecraft.client.network.NetHandlerPlayClient;
-import net.minecraft.client.network.ServerPinger;
-import net.minecraft.client.renderer.GlStateManager;
-import net.minecraft.client.resources.AbstractResourcePack;
-import net.minecraft.client.resources.FallbackResourceManager;
-import net.minecraft.client.resources.IReloadableResourceManager;
-import net.minecraft.client.resources.IResource;
-import net.minecraft.client.resources.IResourcePack;
-import net.minecraft.client.resources.LegacyV2Adapter;
-import net.minecraft.client.resources.SimpleReloadableResourceManager;
-import net.minecraft.client.resources.data.MetadataSerializer;
-import net.minecraft.client.resources.data.PackMetadataSection;
-import net.minecraft.client.util.RecipeBookClient;
-import net.minecraft.crash.CrashReport;
-import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.launchwrapper.Launch;
-import net.minecraft.nbt.CompressedStreamTools;
-import net.minecraft.nbt.NBTTagCompound;
-import net.minecraft.network.INetHandler;
-import net.minecraft.network.NetHandlerPlayServer;
-import net.minecraft.network.NetworkManager;
-import net.minecraft.network.ServerStatusResponse;
-import net.minecraft.network.handshake.INetHandlerHandshakeServer;
-import net.minecraft.network.login.INetHandlerLoginClient;
-import net.minecraft.network.login.INetHandlerLoginServer;
-import net.minecraft.network.play.INetHandlerPlayClient;
-import net.minecraft.network.play.INetHandlerPlayServer;
-import net.minecraft.network.status.INetHandlerStatusClient;
-import net.minecraft.network.status.INetHandlerStatusServer;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.util.IThreadListener;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.StringUtils;
-import net.minecraft.world.WorldSettings;
-import net.minecraft.world.storage.WorldSummary;
-import net.minecraft.world.storage.SaveFormatOld;
-import net.minecraftforge.client.CloudRenderer;
-import net.minecraftforge.client.IRenderHandler;
-import net.minecraftforge.client.event.ModelRegistryEvent;
-import net.minecraftforge.client.resource.IResourceType;
-import net.minecraftforge.client.resource.ReloadRequirements;
-import net.minecraftforge.client.resource.SelectiveReloadStateHandler;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.common.config.ConfigManager;
-import net.minecraftforge.common.util.CompoundDataFixer;
-import net.minecraftforge.fml.client.registry.RenderingRegistry;
-import net.minecraftforge.fml.common.DummyModContainer;
-import net.minecraftforge.fml.common.DuplicateModsFoundException;
-import net.minecraftforge.fml.common.FMLCommonHandler;
-import net.minecraftforge.fml.common.FMLContainerHolder;
-import net.minecraftforge.fml.common.FMLLog;
-import net.minecraftforge.fml.common.IFMLSidedHandler;
-import net.minecraftforge.fml.common.Loader;
-import net.minecraftforge.fml.common.LoaderException;
-import net.minecraftforge.fml.common.MetadataCollection;
-import net.minecraftforge.fml.common.MissingModsException;
-import net.minecraftforge.fml.common.MultipleModsErrored;
-import net.minecraftforge.fml.common.ModContainer;
-import net.minecraftforge.fml.common.ModMetadata;
-import net.minecraftforge.fml.common.ObfuscationReflectionHelper;
-import net.minecraftforge.fml.common.StartupQuery;
-import net.minecraftforge.fml.common.WrongMinecraftVersionException;
-import net.minecraftforge.fml.common.eventhandler.EventBus;
-import net.minecraftforge.fml.common.network.FMLNetworkEvent;
-import net.minecraftforge.fml.common.network.internal.FMLNetworkHandler;
-import net.minecraftforge.fml.common.toposort.ModSortingException;
-import net.minecraftforge.fml.relauncher.Side;
-import net.minecraftforge.registries.GameData;
+import javax.annotation.Nullable;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -143,8 +64,86 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
-import javax.annotation.Nullable;
-
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.entity.EntityPlayerSP;
+import net.minecraft.client.gui.Gui;
+import net.minecraft.client.gui.GuiIngameMenu;
+import net.minecraft.client.gui.GuiMainMenu;
+import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.client.gui.GuiWorldSelection;
+import net.minecraft.client.gui.ScaledResolution;
+import net.minecraft.client.gui.ServerListEntryNormal;
+import net.minecraft.client.multiplayer.GuiConnecting;
+import net.minecraft.client.multiplayer.ServerData;
+import net.minecraft.client.multiplayer.WorldClient;
+import net.minecraft.client.network.NetHandlerPlayClient;
+import net.minecraft.client.network.ServerPinger;
+import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.client.resources.AbstractResourcePack;
+import net.minecraft.client.resources.FallbackResourceManager;
+import net.minecraft.client.resources.IReloadableResourceManager;
+import net.minecraft.client.resources.IResourcePack;
+import net.minecraft.client.resources.LegacyV2Adapter;
+import net.minecraft.client.resources.SimpleReloadableResourceManager;
+import net.minecraft.client.resources.data.MetadataSerializer;
+import net.minecraft.client.resources.data.PackMetadataSection;
+import net.minecraft.client.util.RecipeBookClient;
+import net.minecraft.crash.CrashReport;
+import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.launchwrapper.Launch;
+import net.minecraft.nbt.CompressedStreamTools;
+import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.network.INetHandler;
+import net.minecraft.network.NetHandlerPlayServer;
+import net.minecraft.network.NetworkManager;
+import net.minecraft.network.ServerStatusResponse;
+import net.minecraft.network.handshake.INetHandlerHandshakeServer;
+import net.minecraft.network.login.INetHandlerLoginClient;
+import net.minecraft.network.login.INetHandlerLoginServer;
+import net.minecraft.network.play.INetHandlerPlayClient;
+import net.minecraft.network.play.INetHandlerPlayServer;
+import net.minecraft.network.status.INetHandlerStatusClient;
+import net.minecraft.network.status.INetHandlerStatusServer;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.util.IThreadListener;
+import net.minecraft.util.ResourceLocation;
+import net.minecraft.util.StringUtils;
+import net.minecraft.world.WorldSettings;
+import net.minecraft.world.storage.SaveFormatOld;
+import net.minecraft.world.storage.WorldSummary;
+import net.minecraftforge.client.CloudRenderer;
+import net.minecraftforge.client.IRenderHandler;
+import net.minecraftforge.client.SkyRenderHandler;
+import net.minecraftforge.client.event.ModelRegistryEvent;
+import net.minecraftforge.client.resource.IResourceType;
+import net.minecraftforge.client.resource.ReloadRequirements;
+import net.minecraftforge.client.resource.SelectiveReloadStateHandler;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.common.config.ConfigManager;
+import net.minecraftforge.common.util.CompoundDataFixer;
+import net.minecraftforge.fml.client.registry.RenderingRegistry;
+import net.minecraftforge.fml.common.DummyModContainer;
+import net.minecraftforge.fml.common.DuplicateModsFoundException;
+import net.minecraftforge.fml.common.FMLCommonHandler;
+import net.minecraftforge.fml.common.FMLContainerHolder;
+import net.minecraftforge.fml.common.FMLLog;
+import net.minecraftforge.fml.common.IFMLSidedHandler;
+import net.minecraftforge.fml.common.Loader;
+import net.minecraftforge.fml.common.LoaderException;
+import net.minecraftforge.fml.common.MetadataCollection;
+import net.minecraftforge.fml.common.MissingModsException;
+import net.minecraftforge.fml.common.ModContainer;
+import net.minecraftforge.fml.common.ModMetadata;
+import net.minecraftforge.fml.common.MultipleModsErrored;
+import net.minecraftforge.fml.common.ObfuscationReflectionHelper;
+import net.minecraftforge.fml.common.StartupQuery;
+import net.minecraftforge.fml.common.WrongMinecraftVersionException;
+import net.minecraftforge.fml.common.eventhandler.EventBus;
+import net.minecraftforge.fml.common.network.FMLNetworkEvent;
+import net.minecraftforge.fml.common.network.internal.FMLNetworkHandler;
+import net.minecraftforge.fml.common.toposort.ModSortingException;
+import net.minecraftforge.fml.relauncher.Side;
+import net.minecraftforge.registries.GameData;
 
 /**
  * Handles primary communication from hooked code into the system
@@ -1131,5 +1130,24 @@ public class FMLClientHandler implements IFMLSidedHandler
     public ListenableFuture<Object> scheduleResourcesRefresh(Predicate<IResourceType> resourcePredicate)
     {
         return this.client.addScheduledTask(() -> this.refreshResources(resourcePredicate));
+    }
+
+    public boolean renderSky(float partialTicks)
+    {
+        SkyRenderHandler skyRenderer = this.client.world.provider.getSkyRenderHandler();
+
+        if(skyRenderer.render(partialTicks, this.client.world, this.client))
+        {
+            return true;
+        }
+
+        IRenderHandler renderer = this.client.world.provider.getSkyRenderer();
+        if(renderer != null)
+        {
+            renderer.render(partialTicks, this.client.world, this.client);
+            return true;
+        }
+
+        return false;
     }
 }
