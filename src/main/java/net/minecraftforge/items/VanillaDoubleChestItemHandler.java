@@ -1,6 +1,6 @@
 /*
  * Minecraft Forge
- * Copyright (c) 2016-2018.
+ * Copyright (c) 2016.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -19,20 +19,18 @@
 
 package net.minecraftforge.items;
 
+import com.google.common.base.Objects;
 import net.minecraft.block.Block;
 import net.minecraft.item.ItemStack;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.tileentity.TileEntityChest;
-import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.EnumFacing;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
-
-import java.lang.ref.WeakReference;
-
-import com.google.common.base.Objects;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.lang.ref.WeakReference;
 
 public class VanillaDoubleChestItemHandler extends WeakReference<TileEntityChest> implements IItemHandlerModifiable
 {
@@ -185,19 +183,6 @@ public class VanillaDoubleChestItemHandler extends WeakReference<TileEntityChest
     {
         boolean accessingUpperChest = slot < 27;
         return getChest(accessingUpperChest).getInventoryStackLimit();
-    }
-
-    @Override
-    public boolean isItemValid(int slot, @Nonnull ItemStack stack)
-    {
-        boolean accessingUpperChest = slot < 27;
-        int targetSlot = accessingUpperChest ? slot : slot - 27;
-        TileEntityChest chest = getChest(accessingUpperChest);
-        if (chest != null)
-        {
-            return chest.getSingleChestHandler().isItemValid(targetSlot, stack);
-        }
-        return true;
     }
 
     @Override

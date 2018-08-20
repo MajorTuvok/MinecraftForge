@@ -1,6 +1,6 @@
 /*
  * Minecraft Forge
- * Copyright (c) 2016-2018.
+ * Copyright (c) 2016.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -46,7 +46,24 @@ public class SlotItemHandler extends Slot
         if (stack.isEmpty())
             return false;
 
-        return itemHandler.isItemValid(index, stack);
+        IItemHandler handler = this.getItemHandler();
+        ItemStack remainder;
+        if (handler instanceof IItemHandlerModifiable)
+        {
+            IItemHandlerModifiable handlerModifiable = (IItemHandlerModifiable) handler;
+            ItemStack currentStack = handlerModifiable.getStackInSlot(index);
+
+            handlerModifiable.setStackInSlot(index, ItemStack.EMPTY);
+
+            remainder = handlerModifiable.insertItem(index, stack, true);
+
+            handlerModifiable.setStackInSlot(index, currentStack);
+        }
+        else
+        {
+            remainder = handler.insertItem(index, stack, true);
+        }
+        return remainder.isEmpty() || remainder.getCount() < stack.getCount();
     }
 
     @Override
